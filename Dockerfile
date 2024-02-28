@@ -1,58 +1,59 @@
-FROM ubuntu:16.04
+FROM ubuntu:22.04
 
-# To make it easier for build and release pipelines to run apt-get,
-# configure apt to not require confirmation (assume the -y argument by default)
 ENV DEBIAN_FRONTEND=noninteractive
+
+ENV TARGETARCH="linux-x64"
+
 RUN echo "APT::Get::Assume-Yes \"true\";" > /etc/apt/apt.conf.d/90assumeyes
 
-RUN rm /bin/sh && ln -s /bin/bash /bin/sh
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
+RUN apt update \
+    && apt upgrade \
+    && apt install -y --no-install-recommends \
         ca-certificates \
         curl \
         jq \
         git \
-        iputils-ping \
-        libcurl3 \
-        libicu55 \
-        libunwind8 \
-        netcat \
+        libicu70 \
         zip \
         unzip \
         build-essential \
         cmake \
-        libsdl2-dev
+	apt-transport-https \
+	gnupg \
+	lsb-release \
+	python3-pip \
+	python3-dev
 
-RUN curl -sL https://deb.nodesource.com/setup_10.x | bash -
-RUN curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add -
-RUN echo "deb https://dl.yarnpkg.com/debian/ stable main" | tee /etc/apt/sources.list.d/yarn.list
+# Install docker for building images
+RUN groupadd -g 993 docker
+RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        nodejs \
-        yarn
+RUN echo \
+  "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
+  $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-ENV SDKMAN_DIR /usr/local/sdkman
+RUN apt-get update && \
+    apt-get install -y docker-ce docker-ce-cli containerd.io
 
-RUN curl -s get.sdkman.io | bash
-RUN echo "sdkman_auto_answer=true" > $SDKMAN_DIR/etc/config \
-    && echo "sdkman_auto_selfupdate=false" >> $SDKMAN_DIR/etc/config \
-    && echo "sdkman_insecure_ssl=false" >> $SDKMAN_DIR/etc/config
-
-RUN source "$SDKMAN_DIR/bin/sdkman-init.sh" \
-    && sdk install java 8.0.202-zulufx \
-    && sdk install java 11.0.2-zulufx \
-    && sdk install kotlin 1.3.50 \
-    && sdk install gradle 5.6 \
-    && sdk install maven 3.6.1
-
-ENV JAVA_HOME_8_X64 $SDKMAN_DIR/candidates/java/8.0.202-zulufx
-ENV JAVA_HOME_11_X64 $SDKMAN_DIR/candidates/java/11.0.2-zulufx
+# Install AWS CLI
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+RUN unzip awscliv2.zip
+RUN ./aws/install
 
 WORKDIR /azp
 
 COPY ./start.sh .
 RUN chmod +x start.sh
 
-CMD ["./start.sh"]
+# Create agent user and set up home directory
+RUN useradd -m -d /home/agent agent
+RUN chown -R agent:agent /azp /home/agent
+
+RUN usermod -aG docker agent
+
+USER agent
+
+# Another option is to run the agent as root.
+# ENV AGENT_ALLOW_RUNASROOT="true"
+
+ENTRYPOINT ./start.sh
