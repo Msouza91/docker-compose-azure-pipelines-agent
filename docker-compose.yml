@@ -1,4 +1,4 @@
-version: '3.9'
+version: "3.9"
 services:
   azure-pipelines-agent:
     build: .
@@ -7,6 +7,9 @@ services:
       - AZP_TOKEN=${AZP_TOKEN}
       - AZP_AGENT_NAME=${AZP_AGENT_NAME}
       - AZP_POOL=${AZP_POOL}
+    # This enables Docker-in-Docker, which is required for running Docker
+    # commands in the pipeline, but has security implications, if you don't
+    # need it, you should remove it.
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
